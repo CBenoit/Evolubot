@@ -4,6 +4,8 @@
 #define MODULE_FOLDER "evolubot/"
 #define LAST_NEAT_STATE_FILENAME MODULE_FOLDER"last_neat_state.csv"
 #define LAST_AI_MODULE_STATE_FILENAME MODULE_FOLDER"tactic_only_ai_module_data.csv"
+#define STATS_EVOLVING_FILENAME MODULE_FOLDER"stats_evolving.csv"
+#define STATS_BEST_UNITS_FILENAME MODULE_FOLDER"stats_best_units.csv"
 
 // === Neural driven agents settings ===
 // --- See: NeuralDrivenAgent.

@@ -49,6 +49,8 @@ public:
 
 	netkit::neat& get_neat() { return *m_neat; }
 
+	unsigned int number_of_agents() { return m_agents.size(); }
+
 private:
 	bool m_use_best_genomes;
 	unsigned int m_frame;

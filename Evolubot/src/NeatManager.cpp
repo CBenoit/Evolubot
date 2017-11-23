@@ -1,5 +1,7 @@
 #include <BWAPI.h>
 
+//#include <netkit/neat/neat_primitive_types.h>
+
 #include "NeatManager.h"
 #include "config.h"
 
@@ -26,6 +28,11 @@ NeatManager::NeatManager()
 	params.keep_same_representant_for_species = true;
 	params.use_best_genomes_library = true;
 	params.bad_genome_max_fitness = 6;
+	params.mutation_probs[netkit::ADD_LINK] = 0.02;
+	params.mutation_probs[netkit::ADD_NEURON] = 0.00;
+	params.mutation_probs[netkit::REMOVE_NEURON] = 0.00;
+	params.mutation_probs[netkit::ADD_CASCADE] = 0.03;
+	params.mutation_probs[netkit::REMOVE_GENE] = 0.01;
 	m_neat = std::make_unique<netkit::neat>(params);
 }
 
@@ -67,8 +74,8 @@ void NeatManager::rate_agents() {
 		for (auto& u : m_agents) {
 			// evaluate the organism's performance.
 			u.org->set_fitness(static_cast<double>(u.damages_dealt * ATTACK_PERF_WEIGHT // attack performance.
-				* u.agent.body->getHitPoints() * SURVIVAL_PERF_WEIGHT) // survival performance.
-				* m_agents.size() * COOPERATIVE_PERF_WEIGHT); // cooperative performance.
+				+ u.agent.body->getHitPoints() * SURVIVAL_PERF_WEIGHT) // survival performance.
+				+ m_agents.size() * COOPERATIVE_PERF_WEIGHT); // cooperative performance.
 		}
 	}
 }
@@ -79,7 +86,7 @@ void NeatManager::update_units() {
 	if (!m_use_best_genomes) {
 		// if learning only.
 		for (auto& u : m_agents) {
-			if (u.agent.body->getAirWeaponCooldown() > u.cooldown_last_frame) {
+			if (u.agent.body->getGroundWeaponCooldown() > u.cooldown_last_frame) {
 				u.damages_dealt += u.agent.body->getType().groundWeapon().damageAmount();
 			}
 

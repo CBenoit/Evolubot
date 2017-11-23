@@ -35,5 +35,7 @@ class TacticOnlyAIModule : public BWAPI::AIModule {
 	NeatManager m_nmanager;
 	bool m_fast_mode;
 	bool m_stop;
-	bool m_show_best;
+	bool m_show_best_next_round;
+	bool m_show_best_this_round;
+	bool m_log_stats;
 };

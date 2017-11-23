@@ -26,11 +26,13 @@ void TacticOnlyAIModule::onStart() {
 	// Retrieve Evolubot persistant data.
 	netkit::deserializer des(LAST_AI_MODULE_STATE_FILENAME);
 	des.get_next(m_fast_mode);
-	des.get_next(m_show_best);
+	des.get_next(m_show_best_next_round);
+	m_show_best_this_round = m_show_best_next_round;
+	des.get_next(m_log_stats);
 	des.close();
 
 	// Init the NEAT manager.
-	m_nmanager.init(m_show_best);
+	m_nmanager.init(m_show_best_this_round);
 
 	if (m_fast_mode) {
 		Broodwar->setLocalSpeed(0);
@@ -45,15 +47,50 @@ void TacticOnlyAIModule::onEnd(bool isWinner) {
 		Broodwar->sendText("Oow...");
 	}
 
-	if (!m_show_best) {
+	if (m_show_best_this_round) {
+		if (m_log_stats) {
+			netkit::serializer ser(STATS_BEST_UNITS_FILENAME, ";", true);
+			ser.append(isWinner);
+			ser.append(m_nmanager.number_of_agents());
+			ser.new_line();
+			ser.close();
+		}
+	} else {
 		m_nmanager.rate_agents(); // rate survivors.
+		m_nmanager.get_neat().update_best_genome_ever();
+
+		if (m_log_stats) {
+			netkit::serializer ser(STATS_EVOLVING_FILENAME, ";", true);
+
+			ser.append(isWinner);
+			ser.append(m_nmanager.number_of_agents());
+
+			// compute population's average fitness.
+			double whole_population_avg_fit = 0.0;
+			for (const auto& geno : m_nmanager.get_neat().pop()->get_all_genomes()) {
+				whole_population_avg_fit += geno.get_fitness();
+			}
+			whole_population_avg_fit /= static_cast<double>(m_nmanager.get_neat().pop()->size());
+			ser.append(whole_population_avg_fit);
+
+			ser.append(m_nmanager.get_neat().get_current_best_genome().get_fitness());
+			ser.append(m_nmanager.get_neat().get_best_genome_ever()->get_fitness());
+
+			double current_best = m_nmanager.get_neat().get_current_best_genome().get_fitness();
+			double best_ever = m_nmanager.get_neat().get_best_genome_ever()->get_fitness();
+
+			ser.new_line();
+			ser.close();
+		}
+
 		m_nmanager.save();
 	}
 
 	if (!m_stop) {
 		netkit::serializer ser(LAST_AI_MODULE_STATE_FILENAME);
 		ser.append(m_fast_mode);
-		ser.append(m_show_best);
+		ser.append(m_show_best_next_round);
+		ser.append(m_log_stats);
 		ser.close();
 
 		Broodwar->restartGame();
@@ -102,12 +139,21 @@ void TacticOnlyAIModule::onSendText(std::string text) {
 		}
 		return;
 	} else if (text == "/showbest") {
-		if (m_show_best) {
+		if (m_show_best_next_round) {
 			Broodwar << "Will resume evolution starting next round." << std::endl;
-			m_show_best = false;
+			m_show_best_next_round = false;
 		} else {
 			Broodwar << "Will only show best oganisms starting next round." << std::endl;
-			m_show_best = true;
+			m_show_best_next_round = true;
+		}
+		return;
+	} else if (text == "/logstats") {
+		if (m_log_stats) {
+			Broodwar << "Stop logging stats." << std::endl;
+			m_log_stats = false;
+		} else {
+			Broodwar << "Start logging stats." << std::endl;
+			m_log_stats = true;
 		}
 		return;
 	}

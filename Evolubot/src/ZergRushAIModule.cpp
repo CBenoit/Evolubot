@@ -34,14 +34,12 @@ void ZergRushAIModule::onStart() {
 			if (!p->isObserver())
 				Broodwar << p->getName() << ", playing as " << p->getRace() << std::endl;
 		}
-
 	} else { // if this is not a replay
 		// Retrieve you and your enemy's races. enemy() will just return the first enemy.
 		// If you wish to deal with multiple enemies then you must use enemies().
 		if (Broodwar->enemy()) // First make sure there is an enemy
 			Broodwar << "The matchup is " << Broodwar->self()->getRace() << " vs " << Broodwar->enemy()->getRace() << std::endl;
 	}
-
 }
 
 void ZergRushAIModule::onEnd(bool isWinner) {
