@@ -157,13 +157,16 @@
     <ClCompile Include="src\Dll.cpp" />
     <ClCompile Include="src\NeuralDrivenAgent.cpp" />
     <ClCompile Include="src\NeatManager.cpp" />
+    <ClCompile Include="src\NovelPos.cpp" />
     <ClCompile Include="src\TacticOnlyAIModule.cpp" />
     <ClCompile Include="src\utils.cpp" />
     <ClCompile Include="src\ZergRushAIModule.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\config.h" />
+    <ClInclude Include="src\Experiment.h" />
     <ClInclude Include="src\NeuralDrivenAgent.h" />
+    <ClInclude Include="src\NovelPos.h" />
     <ClInclude Include="src\TacticOnlyAIModule.h" />
     <ClInclude Include="src\NeatManager.h" />
     <ClInclude Include="src\utils.h" />

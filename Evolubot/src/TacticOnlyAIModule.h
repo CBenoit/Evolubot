@@ -11,6 +11,8 @@
 
 class TacticOnlyAIModule : public BWAPI::AIModule {
   public:
+	TacticOnlyAIModule();
+
 	// Virtual functions for callbacks, leave these as they are.
 	virtual void onStart();
 	virtual void onEnd(bool isWinner);
@@ -29,13 +31,22 @@ class TacticOnlyAIModule : public BWAPI::AIModule {
 	virtual void onUnitRenegade(BWAPI::Unit unit);
 	virtual void onSaveGame(std::string gameName);
 	virtual void onUnitComplete(BWAPI::Unit unit);
-	// Everything below this line is safe to modify.
+
+	void saveModuleData();
+	void loadModuleData();
 
   private:
 	NeatManager m_nmanager;
+
 	bool m_fast_mode;
 	bool m_stop;
 	bool m_show_best_next_round;
 	bool m_show_best_this_round;
 	bool m_log_stats;
+	bool m_exp_mode;
+
+	size_t m_nb_evolution_rounds;
+	size_t m_nb_best_rounds;
+	size_t m_run_number;
+	size_t m_exp_number;
 };

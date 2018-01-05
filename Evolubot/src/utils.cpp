@@ -1,3 +1,5 @@
+#include <fstream>
+
 #include <BWAPI.h>
 
 #include "utils.h"
@@ -18,4 +20,9 @@ void draw_circle_at(BWAPI::Position pos, BWAPI::Color color, unsigned int nb_fra
 		nullptr,
 		nb_frames
 	);
+}
+
+bool file_exist(const char *filename) {
+	std::ifstream f(filename);
+	return f.good();
 }

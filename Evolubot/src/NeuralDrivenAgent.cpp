@@ -9,9 +9,10 @@
 #include "config.h"
 #include "utils.h"
 
-NeuralDrivenAgent::NeuralDrivenAgent(BWAPI::Unit unit, netkit::network&& net)
+NeuralDrivenAgent::NeuralDrivenAgent(BWAPI::Unit unit, netkit::network&& net, bool allow_stimpack_behaviour)
 	: body(unit)
-	, m_net(std::move(net)) {}
+	, m_net(std::move(net))
+	, m_allow_stimpack_behaviour(allow_stimpack_behaviour) {}
 
 void NeuralDrivenAgent::update() {
 	int distance_to_closest_enemy = std::numeric_limits<int>::max();
@@ -51,13 +52,25 @@ void NeuralDrivenAgent::update() {
 			: static_cast<double>(number_allies) / MAX_ENTITY_NN;
 		// == normalizaton done ==
 
-		m_net.load_inputs({
-			input_cooldown,
-			input_enemy_distance,
-			input_enemies_density,
-			input_ally_distance,
-			input_allies_density,
-		});
+		if (m_allow_stimpack_behaviour) {
+			m_net.load_inputs({
+				input_cooldown,
+				input_enemy_distance,
+				input_enemies_density,
+				input_ally_distance,
+				input_allies_density,
+				body->isStimmed() ? 1.0 : 0.0
+			});
+		} else {
+			m_net.load_inputs({
+				input_cooldown,
+				input_enemy_distance,
+				input_enemies_density,
+				input_ally_distance,
+				input_allies_density
+			});
+		}
+
 		m_net.activate();
 	}
 
@@ -109,7 +122,7 @@ void NeuralDrivenAgent::update() {
 		}
 
 		// TODO: takes into accound terrain
-		/*
+		/* This is NOT working to my knowledge.
 		BWAPI::TilePosition tilepos = body->getTilePosition();
 		int ground_height = BWAPI::Broodwar->getGroundHeight(tilepos);
 		for (int i = -5; i <= 5; ++i) {
@@ -181,6 +194,10 @@ void NeuralDrivenAgent::update() {
 			body->move(body->getPosition()); // = do nothing
 		}
 		break;
+	case 4: // use stimpack
+		if (!body->isStimmed()) {
+			body->useTech(BWAPI::TechTypes::Stim_Packs);
+		}
 	default: // do nothing
 		body->move(body->getPosition());
 		break;
@@ -191,9 +208,9 @@ void NeuralDrivenAgent::update() {
 		BWAPI::Color(255, 128, 128), FRAMES_PER_UPDATE);
 
 	BWAPI::Broodwar->registerEvent([choosen_action, this](BWAPI::Game*) {
-			BWAPI::Broodwar->drawTextMap(body->getPosition() - BWAPI::Position(0, 0),
-				"%c%ul", BWAPI::Text::White,
-				choosen_action);
+			BWAPI::Broodwar->drawTextMap(body->getPosition() - BWAPI::Position(10, 0),
+				"%c%ul %d", BWAPI::Text::White,
+				choosen_action, static_cast<int>(body->isStimmed()));
 		},
 		nullptr,
 		FRAMES_PER_UPDATE

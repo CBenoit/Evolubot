@@ -1,5 +1,6 @@
 #include <iostream>
 #include <algorithm>
+#include <filesystem>
 
 #include <netkit/csv/deserializer.h>
 #include <netkit/csv/serializer.h>
@@ -8,9 +9,57 @@
 
 #include "TacticOnlyAIModule.h"
 #include "config.h"
+#include "Experiment.h"
 
 using namespace BWAPI;
 using namespace Filter;
+
+unsigned int nb_generations = 100;
+unsigned int nb_generations_unified = 20;
+unsigned int nb_best_rounds = 50;
+unsigned int runs_per_exp = 3;
+unsigned int nb_exps = 12;
+
+#ifdef NOVELTY_SEARCH
+const Experiment exps[] = {
+	//     marines unified  cascade  map                    filename
+	Experiment(true, false, false, "marine_vs_marine.scx", "exp_marine_vs_marine_novelty_NEAT/"),
+	Experiment(true, false, false, "marine_vs_zerg.scx", "exp_marine_vs_zerg_novelty_NEAT/"),
+	Experiment(false, false, false, "vulture_vs_vulture.scx", "exp_vulture_vs_vulture_novelty_NEAT/"),
+	Experiment(false, false, false, "vulture_vs_xealot.scx", "exp_vulture_vs_xealot_novelty_NEAT/")
+};
+#else
+const Experiment exps[] = {
+	//     marines unified cascade  map                    filename
+	Experiment(true, false, false, "marine_vs_marine.scx", "exp_marine_vs_marine_vanilla_NEAT/"),
+	Experiment(true, true, false, "marine_vs_marine.scx", "exp_marine_vs_marine_unified_NEAT/"),
+	Experiment(true, false, true, "marine_vs_marine.scx", "exp_marine_vs_marine_cascade_NEAT/"),
+
+	Experiment(true, false, false, "marine_vs_zerg.scx", "exp_marine_vs_zerg_vanilla_NEAT/"),
+	Experiment(true, true, false, "marine_vs_zerg.scx", "exp_marine_vs_zerg_unified_NEAT/"),
+	Experiment(true, false, true, "marine_vs_zerg.scx", "exp_marine_vs_zerg_cascade_NEAT/"),
+
+	Experiment(false, false, false, "vulture_vs_vulture.scx", "exp_vulture_vs_vulture_vanilla_NEAT/"),
+	Experiment(false, true, false, "vulture_vs_vulture.scx", "exp_vulture_vs_vulture_unified_NEAT/"),
+	Experiment(false, false, true, "vulture_vs_vulture.scx", "exp_vulture_vs_vulture_cascade_NEAT/"),
+
+	Experiment(false, false, false, "vulture_vs_xealot.scx", "exp_vulture_vs_xealot_vanilla_NEAT/"),
+	Experiment(false, true, false, "vulture_vs_xealot.scx", "exp_vulture_vs_xealot_unified_NEAT/"),
+	Experiment(false, false, true, "vulture_vs_xealot.scx", "exp_vulture_vs_xealot_cascade_NEAT/")
+};
+#endif
+
+TacticOnlyAIModule::TacticOnlyAIModule()
+	: m_nmanager()
+	, m_fast_mode()
+	, m_stop()
+	, m_show_best_next_round()
+	, m_show_best_this_round()
+	, m_log_stats()
+	, m_nb_evolution_rounds()
+	, m_nb_best_rounds()
+	, m_run_number()
+	, m_exp_number() {}
 
 void TacticOnlyAIModule::onStart() {
 	// Hello World!
@@ -24,22 +73,81 @@ void TacticOnlyAIModule::onStart() {
 	Broodwar->setCommandOptimizationLevel(2);
 
 	// Retrieve Evolubot persistant data.
-	netkit::deserializer des(LAST_AI_MODULE_STATE_FILENAME);
-	des.get_next(m_fast_mode);
-	des.get_next(m_show_best_next_round);
+	loadModuleData();
 	m_show_best_this_round = m_show_best_next_round;
-	des.get_next(m_log_stats);
-	des.close();
+
+	bool force_reset_neat = false;
+	if (m_exp_mode) {
+		if (m_run_number == 0) {
+			force_reset_neat = true;
+			m_run_number = 1;
+		}
+
+		if (!m_show_best_this_round) {
+			++m_nb_evolution_rounds;
+		}
+
+		if (exps[m_exp_number].unified_mode) {
+			if (m_nb_evolution_rounds > nb_generations_unified * POPULATION_SIZE) {
+				m_show_best_this_round = true;
+				m_show_best_next_round = true;
+			}
+		} else {
+			if (m_nb_evolution_rounds > nb_generations) {
+				m_show_best_this_round = true;
+				m_show_best_next_round = true;
+			}
+		}
+
+		if (m_show_best_this_round) {
+			++m_nb_best_rounds;
+		}
+		
+		if (m_nb_best_rounds > nb_best_rounds) {
+			std::rename(MODULE_FOLDER LAST_NEAT_STATE_FILENAME,
+				(MODULE_FOLDER + exps[m_exp_number].log_folder + std::to_string(m_run_number) + "_" LAST_NEAT_STATE_FILENAME).c_str());
+
+			++m_run_number;
+			m_nb_best_rounds = 0;
+			m_nb_evolution_rounds = 1;
+			m_show_best_this_round = false;
+			m_show_best_next_round = false;
+			force_reset_neat = true;
+
+			if (m_run_number > runs_per_exp) {
+				++m_exp_number;
+				if (m_exp_number > nb_exps) {
+					Broodwar->leaveGame();
+				}
+
+				m_run_number = 0;
+				m_nb_evolution_rounds = 0;
+
+				saveModuleData();
+				Broodwar->setMap("maps/custom/" + exps[m_exp_number].map_filename);
+				Broodwar->restartGame();
+			}
+		}
+	}
 
 	// Init the NEAT manager.
-	m_nmanager.init(m_show_best_this_round);
-
+	if (m_exp_mode) {
+		m_nmanager.init(POPULATION_SIZE, m_show_best_this_round, force_reset_neat,
+			exps[m_exp_number].use_marines, exps[m_exp_number].unified_mode, exps[m_exp_number].cascade_mode);
+	} else {
+		m_nmanager.init(POPULATION_SIZE, m_show_best_this_round, force_reset_neat);
+	}
+	
 	if (m_fast_mode) {
 		Broodwar->setLocalSpeed(0);
 	}
 }
 
 void TacticOnlyAIModule::onEnd(bool isWinner) {
+	if (Broodwar->elapsedTime() < 6) {
+		return;
+	}
+
 	// Called when the game ends
 	if (isWinner) {
 		Broodwar->sendText("Looks like I won.");
@@ -49,18 +157,32 @@ void TacticOnlyAIModule::onEnd(bool isWinner) {
 
 	if (m_show_best_this_round) {
 		if (m_log_stats) {
-			netkit::serializer ser(STATS_BEST_UNITS_FILENAME, ";", true);
+			std::string filename;
+			if (m_exp_mode) {
+				filename = MODULE_FOLDER + exps[m_exp_number].log_folder + std::to_string(m_run_number) + "_" STATS_BEST_UNITS_FILENAME;
+			} else {
+				filename = MODULE_FOLDER STATS_BEST_UNITS_FILENAME;
+			}
+
+			netkit::serializer ser(filename, ";", true);
 			ser.append(isWinner);
 			ser.append(m_nmanager.number_of_agents());
 			ser.new_line();
 			ser.close();
 		}
 	} else {
-		m_nmanager.rate_agents(); // rate survivors.
+		m_nmanager.rate(); // rate survivors / current organism (unified mode)
 		m_nmanager.get_neat().update_best_genome_ever();
 
-		if (m_log_stats) {
-			netkit::serializer ser(STATS_EVOLVING_FILENAME, ";", true);
+		if (m_log_stats && m_nmanager.last_organism_used()) {
+			std::string filename;
+			if (m_exp_mode) {
+				filename = MODULE_FOLDER + exps[m_exp_number].log_folder + std::to_string(m_run_number) + "_" STATS_EVOLVING_FILENAME;
+			} else {
+				filename = MODULE_FOLDER STATS_EVOLVING_FILENAME;
+			}
+
+			netkit::serializer ser(filename, ";", true);
 
 			ser.append(isWinner);
 			ser.append(m_nmanager.number_of_agents());
@@ -70,6 +192,7 @@ void TacticOnlyAIModule::onEnd(bool isWinner) {
 			for (const auto& geno : m_nmanager.get_neat().pop()->get_all_genomes()) {
 				whole_population_avg_fit += geno.get_fitness();
 			}
+			
 			whole_population_avg_fit /= static_cast<double>(m_nmanager.get_neat().pop()->size());
 			ser.append(whole_population_avg_fit);
 
@@ -83,16 +206,15 @@ void TacticOnlyAIModule::onEnd(bool isWinner) {
 			ser.close();
 		}
 
+		#ifdef NOVELTY_SEARCH
+		m_nmanager.update_novelty();
+		#endif
+
 		m_nmanager.save();
 	}
 
 	if (!m_stop) {
-		netkit::serializer ser(LAST_AI_MODULE_STATE_FILENAME);
-		ser.append(m_fast_mode);
-		ser.append(m_show_best_next_round);
-		ser.append(m_log_stats);
-		ser.close();
-
+		saveModuleData();
 		Broodwar->restartGame();
 	}
 }
@@ -101,6 +223,21 @@ void TacticOnlyAIModule::onFrame() {
 	// Display the game frame rate as text in the upper left area of the screen
 	Broodwar->drawTextScreen(200, 0, "FPS: %d", Broodwar->getFPS());
 	Broodwar->drawTextScreen(200, 20, "Average FPS: %f", Broodwar->getAverageFPS());
+
+	if (m_exp_mode) {
+		Broodwar->drawTextScreen(200, 40, "Exp nb %ul", m_exp_number);
+		Broodwar->drawTextScreen(200, 50, "Run nb %ul", m_run_number);
+		Broodwar->drawTextScreen(200, 60, "Nb evol: %ul", m_nb_evolution_rounds);
+		Broodwar->drawTextScreen(200, 70, "Nb best: %ul", m_nb_best_rounds);
+	}
+
+	if (m_log_stats) {
+		Broodwar->drawTextScreen(300, 40, "Log stats on");
+	}
+
+	if (m_fast_mode) {
+		Broodwar->drawTextScreen(300, 55, "Fast mode on");
+	}
 
 	// Return if the game is a replay or is paused
 	if (Broodwar->isReplay() || Broodwar->isPaused() || !Broodwar->self())
@@ -156,6 +293,26 @@ void TacticOnlyAIModule::onSendText(std::string text) {
 			m_log_stats = true;
 		}
 		return;
+	} else if (text == "/startexps") {
+		if (m_exp_mode == false) {
+			Broodwar << "Start experiments." << std::endl;
+			m_log_stats = true;
+			m_exp_mode = true;
+			m_show_best_next_round = false;
+			m_run_number = 0;
+			m_nb_best_rounds = 0;
+			m_nb_evolution_rounds = 0;
+			m_exp_number = 0;
+
+			saveModuleData();
+			Broodwar->setMap("maps/custom/" + exps[m_exp_number].map_filename);
+			Broodwar->restartGame();
+		} else {
+			Broodwar << "Stop experiments." << std::endl;
+			m_log_stats = false;
+			m_exp_mode = false;
+		}
+		return;
 	}
 
 	// Send the text to the game if it is not being processed.
@@ -206,4 +363,30 @@ void TacticOnlyAIModule::onSaveGame(std::string gameName) {
 }
 
 void TacticOnlyAIModule::onUnitComplete(BWAPI::Unit unit) {
+}
+
+void TacticOnlyAIModule::saveModuleData() {
+	netkit::serializer ser(MODULE_FOLDER LAST_AI_MODULE_STATE_FILENAME);
+	ser.append(m_fast_mode);
+	ser.append(m_show_best_next_round);
+	ser.append(m_log_stats);
+	ser.append(m_exp_mode);
+	ser.append(m_nb_evolution_rounds);
+	ser.append(m_nb_best_rounds);
+	ser.append(m_run_number);
+	ser.append(m_exp_number);
+	ser.close();
+}
+
+void TacticOnlyAIModule::loadModuleData() {
+	netkit::deserializer des(MODULE_FOLDER LAST_AI_MODULE_STATE_FILENAME);
+	des.get_next(m_fast_mode);
+	des.get_next(m_show_best_next_round);
+	des.get_next(m_log_stats);
+	des.get_next(m_exp_mode);
+	des.get_next(m_nb_evolution_rounds);
+	des.get_next(m_nb_best_rounds);
+	des.get_next(m_run_number);
+	des.get_next(m_exp_number);
+	des.close();
 }
